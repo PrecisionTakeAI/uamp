@@ -1,8 +1,10 @@
 'use client';
 import { useState, useEffect } from 'react';
 import { submitDispute, getStatus } from '../lib/api';
-import type { Receipt, StatusResponse } from '../lib/types';
+import type { StatusResponse } from '../lib/types';
 import ReceiptTimeline from '../components/ReceiptTimeline';
+import LoadingSpinner from '../components/LoadingSpinner';
+import ErrorBanner from '../components/ErrorBanner';
 import { validateCID, copyToClipboard } from '../lib/utils';
 
 export default function Page() {
@@ -15,7 +17,9 @@ export default function Page() {
   const [loading, setLoading] = useState(false);
   const [polling, setPolling] = useState(false);
   const [error, setError] = useState<string>('');
+  const [networkError, setNetworkError] = useState<string>('');
   const [copySuccess, setCopySuccess] = useState(false);
+  const [retryCount, setRetryCount] = useState(0);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -66,22 +70,40 @@ export default function Page() {
       try {
         const s = await getStatus(disputeId);
         setStatus(s);
+        setNetworkError('');
+        setRetryCount(0);
+        
         if (s.phase === 'COMPLETE' || s.phase === 'ERROR') {
           setPolling(false);
         }
-      } catch (err) {
-        console.error('Status fetch error:', err);
+      } catch (err: any) {
+        const errorMsg = err.message || 'Failed to fetch status';
+        
+        if (errorMsg.includes('CORS') || errorMsg.includes('Network')) {
+          setNetworkError(`Network error: ${errorMsg}. Retrying...`);
+          setRetryCount(prev => prev + 1);
+          
+          if (retryCount > 5) {
+            setPolling(false);
+            setNetworkError('Connection lost. Please check if DALRN Gateway is running.');
+          }
+        } else {
+          console.error('Status fetch error:', err);
+        }
       }
     };
     
     fetchStatus();
     const iv = setInterval(fetchStatus, 5000);
     return () => clearInterval(iv);
-  }, [disputeId, polling]);
+  }, [disputeId, polling, retryCount]);
 
   return (
     <main>
-      <h1 className="text-2xl font-bold mb-4">UAMP • Submit Dispute</h1>
+      <div className="mb-6">
+        <h1 className="text-2xl font-bold">UAMP • Submit Dispute</h1>
+        <p className="text-sm text-gray-600 mt-1">Submit encrypted dispute documents to DALRN Gateway for resolution</p>
+      </div>
       <form onSubmit={handleSubmit} className="grid gap-3 p-4 bg-white rounded-xl shadow">
         <label className="grid gap-1">
           <span className="text-sm font-medium">Parties (comma-separated)</span>
@@ -124,22 +146,35 @@ export default function Page() {
         <button 
           type="submit"
           disabled={loading || !cid.trim()} 
-          className="bg-blue-600 text-white rounded p-2 disabled:opacity-60 hover:bg-blue-700 transition-colors"
+          className="bg-blue-600 text-white rounded p-2 disabled:opacity-60 hover:bg-blue-700 transition-colors flex items-center justify-center gap-2"
         >
-          {loading ? 'Submitting…' : 'Submit Dispute'}
+          {loading && <LoadingSpinner size="sm" />}
+          <span>{loading ? 'Submitting…' : 'Submit Dispute'}</span>
         </button>
-        {error && (
-          <div className="text-sm text-red-600 bg-red-50 border border-red-200 rounded p-2">
-            {error}
-          </div>
-        )}
+        {error && <ErrorBanner error={error} onDismiss={() => setError('')} />}
       </form>
+
+      {networkError && (
+        <div className="mt-4">
+          <ErrorBanner 
+            error={networkError} 
+            type={retryCount > 5 ? 'error' : 'warning'}
+            onDismiss={() => setNetworkError('')}
+          />
+        </div>
+      )}
 
       {disputeId && (
         <section className="mt-8 space-y-4">
           <div className="bg-white rounded-xl shadow p-4">
             <div className="flex items-center justify-between mb-3">
               <h2 className="text-xl font-semibold">Dispute Status</h2>
+              {!status && polling && (
+                <div className="flex items-center gap-2 text-sm text-gray-500">
+                  <LoadingSpinner size="sm" />
+                  <span>Fetching status...</span>
+                </div>
+              )}
               {status && (
                 <span className={`text-sm px-3 py-1 rounded-full font-medium ${
                   status.phase === 'COMPLETE' ? 'bg-green-100 text-green-800' :
@@ -192,12 +227,25 @@ export default function Page() {
             </div>
           </div>
           
-          {status?.receipts && (
-            <div className="bg-white rounded-xl shadow p-4">
-              <h3 className="text-lg font-semibold mb-3">Processing Timeline</h3>
-              <ReceiptTimeline receipts={status.receipts} />
+          <div className="bg-white rounded-xl shadow p-4">
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="text-lg font-semibold">Processing Timeline</h3>
+              {polling && status?.receipts && status.receipts.length > 0 && (
+                <div className="flex items-center gap-1 text-xs text-gray-500">
+                  <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
+                  <span>Live</span>
+                </div>
+              )}
             </div>
-          )}
+            {status?.receipts ? (
+              <ReceiptTimeline receipts={status.receipts} />
+            ) : (
+              <div className="py-8 text-center">
+                <LoadingSpinner size="lg" />
+                <p className="text-sm text-gray-500 mt-3">Waiting for receipts...</p>
+              </div>
+            )}
+          </div>
           
           {status?.eps_budget && (
             <div className="bg-white rounded-xl shadow p-4">
