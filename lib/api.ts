@@ -1,9 +1,15 @@
 import { SubmitDisputeRequest, SubmitDisputeResponse, StatusResponse } from './types';
 
-const BASE = process.env.NEXT_PUBLIC_DALRN_URL || 'http://localhost:8000';
+function getBaseUrl(): string {
+  if (typeof window !== 'undefined') {
+    const stored = localStorage.getItem('DALRN_URL');
+    if (stored) return stored;
+  }
+  return process.env.NEXT_PUBLIC_DALRN_URL || 'http://localhost:8000';
+}
 
 export async function submitDispute(payload: SubmitDisputeRequest): Promise<SubmitDisputeResponse> {
-  const r = await fetch(`${BASE}/submit-dispute`, {
+  const r = await fetch(`${getBaseUrl()}/submit-dispute`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),
@@ -16,7 +22,7 @@ export async function submitDispute(payload: SubmitDisputeRequest): Promise<Subm
 }
 
 export async function getStatus(disputeId: string): Promise<StatusResponse> {
-  const r = await fetch(`${BASE}/status/${encodeURIComponent(disputeId)}`, { cache: 'no-store' });
+  const r = await fetch(`${getBaseUrl()}/status/${encodeURIComponent(disputeId)}`, { cache: 'no-store' });
   if (!r.ok) {
     const msg = await r.text();
     throw new Error(`status failed: ${r.status} ${msg}`);

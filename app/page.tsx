@@ -5,9 +5,11 @@ import type { StatusResponse } from '../lib/types';
 import ReceiptTimeline from '../components/ReceiptTimeline';
 import LoadingSpinner from '../components/LoadingSpinner';
 import ErrorBanner from '../components/ErrorBanner';
+import DevSettings from '../components/DevSettings';
 import { validateCID, copyToClipboard } from '../lib/utils';
 
 export default function Page() {
+  const [dalrnUrl, setDalrnUrl] = useState('');
   const [parties, setParties] = useState('Alice Ltd,Bob Pty');
   const [jurisdiction, setJurisdiction] = useState('NSW-AU');
   const [cid, setCid] = useState('');
@@ -274,6 +276,8 @@ export default function Page() {
           )}
         </section>
       )}
+
+      <DevSettings onUrlChange={setDalrnUrl} />
     </main>
   );
 }
